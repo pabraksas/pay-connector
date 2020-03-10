@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import static java.lang.String.format;
 import static net.logstash.logback.argument.StructuredArguments.kv;
 import static org.apache.commons.lang3.StringUtils.isBlank;
 import static org.apache.commons.lang3.StringUtils.isEmpty;
@@ -114,6 +115,11 @@ public class EpdqNotificationService {
 
         if (newChargeStatus.isPresent()) {
             if(charge.isHistoric()){
+                if ("CAPTURED".equals(newChargeStatus.get().getValue())) {
+                    chargeNotificationProcessor.processForcedCaptureForExpungedCharge(gatewayAccountEntity, notification.getTransactionId(), charge, newChargeStatus.get(), null);
+                    return;
+                }
+                
                 logger.error("{} notification {} could not be processed as charge [{}] has been expunged from connector {} {}",
                         PAYMENT_GATEWAY_NAME, notification,
                         charge.getExternalId(),

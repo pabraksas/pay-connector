@@ -35,6 +35,8 @@ import uk.gov.pay.connector.common.model.api.ExternalChargeState;
 import uk.gov.pay.connector.common.model.api.ExternalTransactionState;
 import uk.gov.pay.connector.common.service.PatchRequestBuilder;
 import uk.gov.pay.connector.events.EventService;
+import uk.gov.pay.connector.events.model.Event;
+import uk.gov.pay.connector.events.model.ResourceType;
 import uk.gov.pay.connector.events.model.charge.PaymentDetailsEntered;
 import uk.gov.pay.connector.events.model.charge.StatusCorrectedToCapturedToMatchGatewayStatus;
 import uk.gov.pay.connector.gateway.PaymentGatewayName;
@@ -44,6 +46,7 @@ import uk.gov.pay.connector.gateway.model.AuthCardDetails;
 import uk.gov.pay.connector.gatewayaccount.dao.GatewayAccountDao;
 import uk.gov.pay.connector.gatewayaccount.model.GatewayAccountEntity;
 import uk.gov.pay.connector.paritycheck.LedgerService;
+import uk.gov.pay.connector.queue.QueueException;
 import uk.gov.pay.connector.queue.StateTransitionService;
 import uk.gov.pay.connector.refund.dao.RefundDao;
 import uk.gov.pay.connector.token.dao.TokenDao;
@@ -61,6 +64,7 @@ import static java.util.Collections.singletonList;
 import static javax.ws.rs.core.UriBuilder.fromUri;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.core.Is.is;
+import static org.hamcrest.CoreMatchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -73,6 +77,7 @@ import static org.mockito.Mockito.when;
 import static uk.gov.pay.connector.charge.model.ChargeResponse.ChargeResponseBuilder;
 import static uk.gov.pay.connector.charge.model.ChargeResponse.aChargeResponseBuilder;
 import static uk.gov.pay.connector.charge.model.domain.ChargeEntityFixture.aValidChargeEntity;
+import static uk.gov.pay.connector.charge.model.domain.ChargeStatus.AUTHORISATION_ERROR;
 import static uk.gov.pay.connector.charge.model.domain.ChargeStatus.AUTHORISATION_SUCCESS;
 import static uk.gov.pay.connector.charge.model.domain.ChargeStatus.CAPTURED;
 import static uk.gov.pay.connector.charge.model.domain.ChargeStatus.CREATED;
@@ -241,6 +246,23 @@ public class ChargeServiceTest {
                 CAPTURED, 
                 chargeEventEntity, 
                 StatusCorrectedToCapturedToMatchGatewayStatus.class);
+    }
+
+    @Test
+    public void forcingHistoricChargeToCapturedState_shouldSucceedAndEmitEvent() throws QueueException {
+        ChargeEntity chargeEntity = ChargeEntityFixture.aValidChargeEntity().withStatus(AUTHORISATION_ERROR).build();
+        Charge charge = Charge.from(chargeEntity);
+        
+        service.forceCaptureForExpungedCharge(charge, gatewayAccount, CAPTURED, null);
+
+        ArgumentCaptor<Event> eventArgumentCaptor = ArgumentCaptor.forClass(Event.class);
+        
+        verify(mockEventService).emitEvent(eventArgumentCaptor.capture());
+        Event event = eventArgumentCaptor.getValue();
+        
+        assertThat(event.getEventType(), is("EXPUNGED_CHARGE_STATUS_CORRECTED_TO_CAPTURED_TO_MATCH_GATEWAY_STATUS"));
+        assertThat(event.getTimestamp(), is(nullValue()));
+        assertThat(event.getResourceType(), is(ResourceType.PAYMENT));
     }
     
     @Test(expected = InvalidForceStateTransitionException.class)

@@ -50,6 +50,7 @@ import uk.gov.pay.connector.common.model.domain.PrefilledAddress;
 import uk.gov.pay.connector.common.service.PatchRequestBuilder;
 import uk.gov.pay.connector.events.EventService;
 import uk.gov.pay.connector.events.model.Event;
+import uk.gov.pay.connector.events.model.charge.ExpungedChargeStatusCorrectedToCapturedToMatchGatewayStatus;
 import uk.gov.pay.connector.events.model.charge.PaymentDetailsEntered;
 import uk.gov.pay.connector.gateway.PaymentProviders;
 import uk.gov.pay.connector.gateway.model.AuthCardDetails;
@@ -58,6 +59,7 @@ import uk.gov.pay.connector.gatewayaccount.dao.GatewayAccountDao;
 import uk.gov.pay.connector.gatewayaccount.model.GatewayAccountEntity;
 import uk.gov.pay.connector.paritycheck.LedgerService;
 import uk.gov.pay.connector.paymentprocessor.model.OperationType;
+import uk.gov.pay.connector.queue.QueueException;
 import uk.gov.pay.connector.queue.StateTransitionService;
 import uk.gov.pay.connector.refund.dao.RefundDao;
 import uk.gov.pay.connector.refund.model.domain.RefundEntity;
@@ -678,6 +680,21 @@ public class ChargeService {
 
     public Optional<ChargeEntity> findByProviderAndTransactionId(String paymentGatewayName, String transactionId) {
         return chargeDao.findByProviderAndTransactionId(paymentGatewayName, transactionId);
+    }
+    
+    public void forceCaptureForExpungedCharge(Charge charge, GatewayAccountEntity gatewayAccountEntity, ChargeStatus targetChargeState, ZonedDateTime gatewayEventDate) {
+        Event event = new ExpungedChargeStatusCorrectedToCapturedToMatchGatewayStatus(charge.getExternalId(), gatewayEventDate);
+
+        logger.info(format("Force state transition from [%s] to [%s]", charge.getStatus(), targetChargeState.getValue()),
+                List.of(kv(PAYMENT_EXTERNAL_ID, charge.getExternalId()),
+                        kv(GATEWAY_ACCOUNT_ID, gatewayAccountEntity.getId()),
+                        kv(PROVIDER, gatewayAccountEntity.getGatewayName())));
+        
+        try {
+            eventService.emitEvent(event);
+        } catch (QueueException e) {
+            logger.error("Failed to emit event {} due to {} [externalId={}]", event.getEventType(), e.getMessage(), event.getResourceExternalId());
+        }
     }
 
     @Transactional

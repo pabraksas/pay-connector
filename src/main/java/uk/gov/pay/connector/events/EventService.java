@@ -21,6 +21,10 @@ public class EventService {
         this.eventQueue = eventQueue;
         this.emittedEventDao = emittedEventDao;
     }
+    
+    public void emitEvent(Event event) throws QueueException {
+        eventQueue.emitEvent(event);
+    }
 
     public void emitAndRecordEvent(Event event, ZonedDateTime doNotRetryEmitUntilDate) {
         try {

@@ -86,4 +86,15 @@ public class ChargeNotificationProcessor {
             return false;
         }
     }
+    
+    public void processForcedCaptureForExpungedCharge(GatewayAccountEntity gatewayAccount, String gatewayTransactionId, Charge charge, ChargeStatus newStatus, ZonedDateTime gatewayEventDate) {
+        logger.info(String.format("Forcibly changing charge status for externalId [%s] [%s]->[%s]",
+                charge.getExternalId(), charge.getStatus(), newStatus.getValue()),
+                kv(PAYMENT_EXTERNAL_ID, charge.getExternalId()),
+                kv(PROVIDER_PAYMENT_ID, gatewayTransactionId),
+                kv(GATEWAY_ACCOUNT_ID, gatewayAccount.getId()),
+                kv(PROVIDER, gatewayAccount.getGatewayName()));
+        
+        chargeService.forceCaptureForExpungedCharge(charge, gatewayAccount, newStatus, gatewayEventDate);
+    }
 }
